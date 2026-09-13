@@ -60,7 +60,7 @@ Before starting, make sure you have:
 
 ### 1.1 Create a Free Cluster
 
-1. Go to [MongoDB Atlas](https://cloud.mongodb.com) → **Create a Project** → name it `vybe`
+1. Go to [MongoDB Atlas](https://cloud.mongodb.com) → **Create a Project** → name it `Vybe`
 2. Click **Build a Cluster** → Select **M0 Free Tier** → Choose region closest to your Render services (e.g., **US East**)
 3. Click **Create Deployment**
 
