@@ -1,0 +1,240 @@
+version: "3.8"
+
+services:
+  # ─────────────────────────────────────────────
+  # Infrastructure
+  # ─────────────────────────────────────────────
+
+  mongodb:
+    image: mongo:7
+    container_name: vybe-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: socialMedia
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - vybe-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: vybe-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - vybe-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  kafka:
+    image: apache/kafka:latest
+    container_name: vybe-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - vybe-network
+
+  # ─────────────────────────────────────────────
+  # Microservices
+  # ─────────────────────────────────────────────
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: vybe-api-gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-8000}:8000"
+    env_file:
+      - ./services/api-gateway/.env
+    environment:
+      PORT: 8000
+      AUTH_SERVICE_URL: http://auth-service:3001
+      USER_SERVICE_URL: http://user-service:3002
+      CONTENT_SERVICE_URL: http://content-service:3003
+      MESSAGING_SERVICE_URL: http://messaging-service:3004
+      NOTIFICATION_SERVICE_URL: http://notification-service:3005
+    volumes:
+      - ./services/api-gateway:/app
+      - /app/node_modules
+    depends_on:
+      auth-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      content-service:
+        condition: service_started
+      messaging-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+    networks:
+      - vybe-network
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: vybe-auth-service
+    restart: unless-stopped
+    env_file:
+      - ./services/auth-service/.env
+    environment:
+      PORT: 3001
+      MONGODB_URL: mongodb://mongodb:27017/socialMedia
+    volumes:
+      - ./services/auth-service:/app
+      - /app/node_modules
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - vybe-network
+
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    container_name: vybe-user-service
+    restart: unless-stopped
+    env_file:
+      - ./services/user-service/.env
+    environment:
+      PORT: 3002
+      MONGODB_URL: mongodb://mongodb:27017/socialMedia
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    volumes:
+      - ./services/user-service:/app
+      - /app/node_modules
+      - user_service_uploads:/app/public
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - vybe-network
+
+  content-service:
+    build:
+      context: ./services/content-service
+      dockerfile: Dockerfile
+    container_name: vybe-content-service
+    restart: unless-stopped
+    env_file:
+      - ./services/content-service/.env
+    environment:
+      PORT: 3003
+      MONGODB_URL: mongodb://mongodb:27017/socialMedia
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    volumes:
+      - ./services/content-service:/app
+      - /app/node_modules
+      - content_service_uploads:/app/public
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - vybe-network
+
+  messaging-service:
+    build:
+      context: ./services/messaging-service
+      dockerfile: Dockerfile
+    container_name: vybe-messaging-service
+    restart: unless-stopped
+    env_file:
+      - ./services/messaging-service/.env
+    environment:
+      PORT: 3004
+      MONGODB_URL: mongodb://mongodb:27017/socialMedia
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    volumes:
+      - ./services/messaging-service:/app
+      - /app/node_modules
+      - messaging_service_uploads:/app/public
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - vybe-network
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: vybe-notification-service
+    restart: unless-stopped
+    env_file:
+      - ./services/notification-service/.env
+    environment:
+      PORT: 3005
+      MONGODB_URL: mongodb://mongodb:27017/socialMedia
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    volumes:
+      - ./services/notification-service:/app
+      - /app/node_modules
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - vybe-network
+
+# ─────────────────────────────────────────────
+# Volumes & Networks
+# ─────────────────────────────────────────────
+
+volumes:
+  mongodb_data:
+  redis_data:
+  kafka_data:
+  user_service_uploads:
+  content_service_uploads:
+  messaging_service_uploads:
+
+networks:
+  vybe-network:
+    driver: bridge

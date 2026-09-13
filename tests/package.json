@@ -1,0 +1,16 @@
+{
+  "name": "vybe-integration-tests",
+  "version": "1.0.0",
+  "description": "Integration tests for Vybe Phase 9",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest --runInBand --detectOpenHandles --forceExit"
+  },
+  "devDependencies": {
+    "axios": "^1.20.0",
+    "form-data": "^4.0.6",
+    "jest": "^30.5.1",
+    "socket.io-client": "^4.8.3"
+  },
+  "type": "commonjs"
+}

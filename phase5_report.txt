@@ -1,0 +1,16 @@
+--- STARTING PHASE 5 VERIFICATION ---
+MongoDB Connected for verification.
+1. Users created and authenticated.
+2. Post created by User 1 via API.
+3. POST_LIKED request returned in 51 ms (Synchronous Response)
+-> POST_LIKED Flow: FAIL (Notification not found or missing eventId)
+-> COMMENT Flow: FAIL
+-> USER_FOLLOWED Flow: FAIL
+6. Testing Idempotency...
+Error during verification: KafkaJSNonRetriableError
+  Caused by: KafkaJSConnectionError: Connection error: 
+    at Socket.onError (c:\Users\krish\.gemini\antigravity-ide\brain\7c13fb08-759e-4e1f-b950-649e8c58691d\scratch\node_modules\kafkajs\src\network\connection.js:210:23)
+    at Socket.emit (node:events:524:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
