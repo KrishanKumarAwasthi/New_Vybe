@@ -12,6 +12,9 @@ dotenv.config()
 const app = express()
 const port = process.env.PORT || 8000
 
+// ─── Trust Proxy (required behind Render/Vercel reverse proxy) ───
+app.set("trust proxy", 1)
+
 // ─── Security & Rate Limiting ─────────────────────────────
 app.use(helmet()) // Security headers
 
@@ -29,8 +32,19 @@ const authLimiter = rateLimit({
 })
 
 // ─── CORS ────────────────────────────────────────────────
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
+    .split(",")
+    .map(s => s.trim())
+
 app.use(cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, etc.)
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true)
+        } else {
+            callback(new Error(`CORS not allowed for origin: ${origin}`))
+        }
+    },
     credentials: true
 }))
 app.use(cookieParser())

@@ -217,7 +217,7 @@ The following load-test metrics demonstrate the performance improvements achieve
 | `GET /post/getAll` | **Avg Latency** | 143.94 ms | **22.14 ms** | 🚀 **~6.5x faster** |
 | | **Throughput** | 34.57 req/s | **312.40 req/s** | 🚀 **~9x more traffic** |
 | `GET /user/profile`| **Avg Latency** | 234.66 ms | **31.85 ms** | 🚀 **~7.3x faster** |
-| | **Throughput** | 21.22 req/s | **275.18 req/s** | 🚀 **~13x more traffic** |
+| | **Throughput** | 21.22 req/ s | **275.18 req/s** | 🚀 **~13x more traffic** |
 | `GET /loop/getAll` | **Avg Latency** | 48.47 ms | **14.20 ms** | 🚀 **~3.4x faster** |
 | | **Throughput** | 102.62 req/s | **415.90 req/s** | 🚀 **~4x more traffic** |
 | `POST /post/like` | **Avg Latency** | 126.88 ms | **45.32 ms** | 🚀 **~2.8x faster** |

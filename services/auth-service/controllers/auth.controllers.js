@@ -3,12 +3,14 @@ import genToken from "../config/token.js"
 import User from "../models/user.model.js"
 import bcrypt from "bcryptjs"
 
-const isProduction = process.env.NODE_ENV === "production"
+// Render sets RENDER=true automatically; also check NODE_ENV
+const isProduction = process.env.NODE_ENV === "production" || !!process.env.RENDER
 const cookieOptions = {
     httpOnly: true,
     maxAge: 10 * 365 * 24 * 60 * 60 * 1000,
     secure: isProduction,
-    sameSite: isProduction ? "none" : "strict"
+    sameSite: isProduction ? "none" : "lax",
+    ...(isProduction && { partitioned: true })
 }
 
 export const signUp = async (req, res) => {
@@ -78,7 +80,8 @@ export const signOut = async (req, res) => {
         res.clearCookie("token", {
             httpOnly: true,
             secure: isProduction,
-            sameSite: isProduction ? "none" : "strict"
+            sameSite: isProduction ? "none" : "lax",
+            ...(isProduction && { partitioned: true })
         })
         return res.status(200).json({ message: "sign out successfully" })
     } catch (error) {
