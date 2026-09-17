@@ -298,7 +298,6 @@ Based on actual dependencies, database models, and communication patterns, the m
   - Hosts the Socket.io WebSocket server.
   - Maintains online user presence backed by Redis (replacing the local in-memory object).
   - Emits `"newMessage"` to recipient sockets.
-  - Subscribes to notification and content broadcasts from Redis or Kafka to relay to clients.
 
 ### 6. Notification Service
 - **Domain**: Persisting and serving user notifications.
@@ -306,7 +305,6 @@ Based on actual dependencies, database models, and communication patterns, the m
 - **Integration**:
   - Consumes events from Kafka (`POST_LIKED`, `COMMENT_CREATED`, `USER_FOLLOWED`, etc.).
   - Writes notification records to MongoDB.
-  - Publishes real-time notification alerts to Messaging Service/Redis to notify connected users.
 
 ---
 

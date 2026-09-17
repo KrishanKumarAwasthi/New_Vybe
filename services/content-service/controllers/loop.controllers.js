@@ -50,12 +50,10 @@ export const like = async (req, res) => {
                     loopOwnerId: loop.author,
                     userId: req.userId
                 });
-                // Note: Real-time notification emission will be restored via Redis Pub/Sub in later phase
             }
         }
         await loop.save()
         await loop.populate("author", "name userName profileImage")
-        // Note: Real-time broadcast 'likedLoop' will be restored via Redis Pub/Sub in later phase
         return res.status(200).json(loop)
     } catch (error) {
         return res.status(500).json({ message: `like loop error ${error}` })
@@ -83,12 +81,10 @@ export const comment = async (req, res) => {
                 userId: req.userId,
                 message
             });
-            // Note: Real-time notification emission will be restored via Redis Pub/Sub in later phase
         }
         await loop.save()
         await loop.populate("author", "name userName profileImage")
         await loop.populate("comments.author")
-        // Note: Real-time broadcast 'commentedLoop' will be restored via Redis Pub/Sub in later phase
         return res.status(200).json(loop)
     } catch (error) {
         return res.status(500).json({ message: `comment loop error ${error}` })

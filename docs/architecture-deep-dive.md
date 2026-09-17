@@ -53,42 +53,136 @@ Split the monolith into **6 independent services**, each with its own process, i
 ## 2. Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          FRONTEND (React)                          │
-│                     Hosted on Vercel                               │
-│              https://new-vybe.vercel.app                           │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │  HTTP + WebSocket
-                            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      API GATEWAY (:8000)                           │
-│  ┌──────────┐ ┌──────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐ │
-│  │  Helmet   │ │Rate Limit│ │  CORS   │ │ Proxy    │ │ WS Proxy │ │
-│  └──────────┘ └──────────┘ └─────────┘ └──────────┘ └──────────┘ │
-└────┬──────────┬──────────┬──────────┬──────────┬────────────────────┘
-     │          │          │          │          │
-     ▼          ▼          ▼          ▼          ▼
-┌─────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────┐
-│  Auth   │ │  User   │ │ Content  │ │Messaging │ │ Notification  │
-│ :3001   │ │ :3002   │ │  :3003   │ │  :3004   │ │    :3005      │
-└─────────┘ └────┬────┘ └────┬─────┘ └──────────┘ └───────┬───────┘
-                 │           │                             │
-                 ▼           ▼                             │
-            ┌─────────┐ ┌─────────┐                       │
-            │  Redis  │ │  Redis  │                       │
-            │ (Cache) │ │ (Cache) │                       │
-            └─────────┘ └─────────┘                       │
-                 │           │                             │
-                 │     ┌─────┴───────┐                     │
-                 │     │   Kafka     │◄────────────────────┘
-                 │     │ (Events)    │   (Consumes events)
-                 │     └─────────────┘
-                 │           │
-                 ▼           ▼
-            ┌──────────────────────┐
-            │     MongoDB Atlas    │
-            │   (Shared Database)  │
-            └──────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                      FRONTEND (React + Vite)                                     │
+│                                    Hosted on Vercel (HTTPS)                                       │
+│                               https://new-vybe.vercel.app                                        │
+│                                                                                                  │
+│   Pages: SignIn · SignUp · Home (Feed) · Profile · Messages · Explore · Loops · Stories           │
+│   State: Zustand (auth, messages, notifications)                                                 │
+│   Real-time: Socket.io client → /socket.io/*                                                     │
+└──────────────────────────────────────┬───────────────────────────────────────────────────────────┘
+                                       │
+                          HTTP REST + WebSocket (wss://)
+                                       │
+                                       ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                              API GATEWAY (Express) — Port 8000                                   │
+│                              The ONLY service exposed to the internet                            │
+│                                                                                                  │
+│   Middleware Pipeline:                                                                           │
+│   ┌──────────┐  ┌────────────────────┐  ┌────────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│   │  Helmet   │→│  Rate Limiter      │→│   CORS     │→│ Cookie Parser│→│ http-proxy-       │  │
+│   │(security │  │ Global: 2000/15min │  │(Vercel     │  │(forwards JWT│  │ middleware        │  │
+│   │ headers) │  │ Auth:   500/15min  │  │ origin)    │  │ cookies)    │  │(route → service)  │  │
+│   └──────────┘  └────────────────────┘  └────────────┘  └──────────────┘  └───────────────────┘  │
+│                                                                                                  │
+│   Route Map:                                                                                     │
+│   /api/auth/*            ──→  Auth Service         (:3001)                                       │
+│   /api/user/*            ──→  User Service         (:3002)                                       │
+│   /api/post/*            ──→  Content Service      (:3003)                                       │
+│   /api/loop/*            ──→  Content Service      (:3003)                                       │
+│   /api/story/*           ──→  Content Service      (:3003)                                       │
+│   /api/message/*         ──→  Messaging Service    (:3004)                                       │
+│   /api/notifications/*   ──→  Notification Service (:3005)                                       │
+│   /socket.io/*           ──→  Messaging Service    (:3004)  [WebSocket upgrade]                  │
+└───┬──────────┬───────────┬───────────┬──────────────┬────────────────────────────────────────────┘
+    │          │           │           │              │
+    ▼          ▼           ▼           ▼              ▼
+┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
+│  AUTH  │ │  USER  │ │ CONTENT  │ │MESSAGING │ │ NOTIFICATION │
+│ :3001  │ │ :3002  │ │  :3003   │ │  :3004   │ │    :3005     │
+│        │ │        │ │          │ │          │ │              │
+│ Signup │ │ Get    │ │ Posts    │ │ Socket.io│ │ Kafka        │
+│ Login  │ │ Profile│ │ Loops    │ │ Server   │ │ Consumer     │
+│ Logout │ │ Edit   │ │ Stories  │ │          │ │              │
+│ Verify │ │ Follow │ │ Like     │ │ 1:1 Chat │ │ Processes:   │
+│        │ │ Search │ │ Comment  │ │ Online   │ │ POST_LIKED   │
+│ JWT    │ │        │ │ Upload   │ │ Presence │ │ POST_COMMENT │
+│ Issuer │ │        │ │ (Multer +│ │          │ │ LOOP_LIKED   │
+│        │ │        │ │Cloudinary│ │ Events:  │ │ LOOP_COMMENT │
+│        │ │        │ │          │ │ newMsg   │ │ USER_FOLLOWED│
+│        │ │        │ │          │ │ onlineUsr│ │              │
+└────┬───┘ └───┬────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘
+     │         │           │            │               │
+     │         │           │            │               │
+─ ─ ─│─ ─ ─ ─ │─ ─ ─ ─ ─ │─ ─ ─ ─ ─ ─│─ ─ ─ ─ ─ ─ ─ │─ ─ ─ INFRASTRUCTURE ─ ─ ─
+     │         │           │            │               │
+     │    ┌────┴────┐ ┌────┴────┐  ┌────┴────┐          │
+     │    │  Redis  │ │  Redis  │  │  Redis  │          │
+     │    │ (Cache) │ │ (Cache) │  │(Presence│          │
+     │    │         │ │         │  │  Hash)  │          │
+     │    │ Keys:   │ │ Keys:   │  │         │          │
+     │    │ user:   │ │ posts:  │  │ Key:    │          │
+     │    │ profile:│ │ feed    │  │ online: │          │
+     │    │ {name}  │ │         │  │ users   │          │
+     │    │ TTL:5m  │ │ TTL:2m  │  │         │          │
+     │    └────┬────┘ └────┬────┘  └────┬────┘          │
+     │         │           │            │               │
+     │         │      ┌────┴────────────┘               │
+     │         │      │                                 │
+     │         │      │    ┌─────────────────────────────┘
+     │         │      │    │
+     │    ┌────┴──────┴────┴──────────────────────────────────────┐
+     │    │               APACHE KAFKA (KRaft mode)               │
+     │    │                                                       │
+     │    │   ┌────────────────┐        ┌──────────────┐          │
+     │    │   │ content-events │        │ user-events  │          │
+     │    │   │                │        │              │          │
+     │    │   │ POST_LIKED     │        │ USER_FOLLOWED│          │
+     │    │   │ POST_COMMENTED │        └──────┬───────┘          │
+     │    │   │ LOOP_LIKED     │               │                  │
+     │    │   │ LOOP_COMMENTED │               │                  │
+     │    │   │ POST_CREATED   │               │                  │
+     │    │   │ POST_DELETED   │               │                  │
+     │    │   └───────┬────────┘               │                  │
+     │    │           │                        │                  │
+     │    │           │  Produced by:          │  Produced by:    │
+     │    │           │  Content Service       │  User Service    │
+     │    │           │                        │                  │
+     │    │           └────────┬───────────────┘                  │
+     │    │                    │                                  │
+     │    │                    │  Consumed by:                    │
+     │    │                    │  Notification Service            │
+     │    │                    │  (with idempotency via eventId)  │
+     │    └────────────────────┼──────────────────────────────────┘
+     │                         │
+     │                         │
+     ▼                         ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     MONGODB ATLAS (Shared)                        │
+│                                                                  │
+│   Collections:                                                   │
+│   ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────┐      │
+│   │  users   │ │  posts   │ │  loops   │ │ conversations │      │
+│   └──────────┘ └──────────┘ └──────────┘ └───────────────┘      │
+│   ┌──────────┐ ┌──────────┐ ┌──────────┐                        │
+│   │ stories  │ │ messages │ │notificat-│                        │
+│   │          │ │          │ │  ions    │                        │
+│   └──────────┘ └──────────┘ └──────────┘                        │
+│                                                                  │
+│   Accessed by: ALL services (shared connection string)           │
+│   Auth: MongoDB Atlas M0 (free tier) / local Docker              │
+└──────────────────────────────────────────────────────────────────┘
+
+
+  CONNECTION LEGEND
+  ─────────────────
+  ──→   HTTP proxy (API Gateway → Service)
+  ──→   Redis GET/SET/DEL (cache read/write/invalidate)
+  ──→   Kafka produce / consume (async events)
+  ──→   MongoDB read/write (Mongoose queries)
+  ──→   WebSocket upgrade (Socket.io)
+
+  FLOW SUMMARY
+  ─────────────
+  1. Client → API Gateway (HTTP/WS)    : All traffic enters through :8000
+  2. Gateway → Services (HTTP proxy)   : Routes by URL path, forwards cookies
+  3. Services → Redis (cache)          : Read-through cache for profiles & feeds
+  4. Services → Kafka (produce)        : Content & User services publish events
+  5. Kafka → Notification Svc (consume): Creates notifications asynchronously
+  6. Services → MongoDB (read/write)   : All persistent data storage
+  7. Client ↔ Messaging Svc (WS)       : Real-time chat & online presence
 ```
 
 **Key Insight:** The frontend only ever talks to the API Gateway. It has no idea that 5 separate services exist behind it. The Gateway routes requests based on the URL path.
@@ -112,13 +206,13 @@ Split the monolith into **6 independent services**, each with its own process, i
 ### Redis (ioredis)
 - **Why Redis:** MongoDB queries for feeds involve sorting, populating references, and filtering. This takes ~150ms. Redis stores data in RAM, so the same data can be returned in ~15ms — a 10x improvement.
 - **Why ioredis over node-redis:** `ioredis` has better support for Cluster mode, Sentinel, and pipelining. It also handles reconnection more gracefully and supports the `lazyConnect` option we use.
-- **Why not Memcached:** Redis supports richer data structures (sorted sets, hashes, pub/sub). We use its key-value caching now, but the architecture is ready for pub/sub if we add cross-service Socket.io broadcasting later.
+- **Why not Memcached:** Redis supports richer data structures (sorted sets, hashes) and handles reconnection more gracefully. We use its key-value caching capabilities.
 - **Cache Strategy:** Cache-Aside (also called Lazy Loading). We check Redis first; on a miss, we query MongoDB and populate Redis. We invalidate (delete) the cache key whenever data changes.
 
 ### Apache Kafka (kafkajs)
 - **Why Kafka:** When a user likes a post, the notification needs to be created. In the monolith, this was synchronous — the user had to wait for the notification write to complete before getting a response. Kafka decouples this: the Content Service publishes an event and returns immediately. The Notification Service processes it asynchronously.
 - **Why not RabbitMQ:** Kafka provides *durable, ordered, replayable* event logs. If the Notification Service crashes, the events are not lost — they persist on Kafka's disk until the service recovers and catches up. RabbitMQ deletes messages once they're acknowledged.
-- **Why not Redis Pub/Sub:** Redis Pub/Sub is fire-and-forget. If no subscriber is listening when a message is published, the message is lost forever. Kafka guarantees delivery.
+- **Why not Redis Pub/Sub:** Redis Pub/Sub is fire-and-forget. If no subscriber is listening when a message is published, the message is lost forever. Kafka guarantees delivery, which is why we use Kafka for all cross-service events.
 - **Why Confluent Cloud in production:** Running a Kafka cluster yourself requires managing ZooKeeper (or KRaft), broker replication, and partition rebalancing. Confluent Cloud is fully managed and provides SASL/SSL authentication out of the box.
 
 ### Socket.io
@@ -919,7 +1013,7 @@ The user doesn't wait for the notification to be created. Kafka absorbs the burs
 | Kafka for notifications only | Kafka for all inter-service communication | Most operations (create post, send message) are request-response. Only notifications are truly fire-and-forget. |
 | JWT in httpOnly cookie | JWT in localStorage / Authorization header | Cookies are automatically sent by the browser. localStorage requires manual header management and is vulnerable to XSS. |
 | Single Kafka consumer group | Multiple consumer groups | We only have one notification service. Multiple consumer groups would process the same event multiple times. |
-| 2-min feed cache TTL | Longer TTL or real-time invalidation | 2 minutes balances freshness and performance. Real-time invalidation would require Redis Pub/Sub across services. |
+| 2-min feed cache TTL | Longer TTL or real-time invalidation | 2 minutes balances freshness and performance. Real-time invalidation would add unnecessary complexity at this scale. |
 
 ---
 

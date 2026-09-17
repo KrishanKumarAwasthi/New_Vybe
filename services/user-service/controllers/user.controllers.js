@@ -161,7 +161,6 @@ export const follow = async (req, res) => {
                     followerId: currentUser._id,
                     followedUserId: targetUser._id
                 });
-                // Note: Real-time socket emission will be restored via Redis Pub/Sub in later phase
             }
             await currentUser.save()
             await targetUser.save()

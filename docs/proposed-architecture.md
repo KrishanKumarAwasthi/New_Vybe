@@ -307,7 +307,6 @@ services/
 **Key Changes from Monolith**:
 - **No direct socket.io calls**: The Content Service no longer imports `socket.js` or calls `io.emit(...)` directly. Instead:
   - After a like/comment, it publishes an event to Kafka (e.g., `POST_LIKED`).
-  - It also publishes to Redis Pub/Sub for real-time broadcast events (`likedPost`, `commentedPost`, etc.) which the Messaging Service subscribes to and relays to connected clients.
 - **No direct notification creation**: All notification generation is deferred to the Notification Service via Kafka events.
 
 **Redis Usage**: Cache `getAllPosts` and `getAllLoops` responses with short TTLs, invalidated on new content creation.
@@ -321,12 +320,6 @@ services/
 - `LOOP_LIKED`
 - `LOOP_COMMENTED`
 - `STORY_CREATED`
-
-**Redis Pub/Sub Published** (for real-time UI broadcast):
-- `realtime:likedPost` → `{ postId, likes }`
-- `realtime:commentedPost` → `{ postId, comments }`
-- `realtime:likedLoop` → `{ loopId, likes }`
-- `realtime:commentedLoop` → `{ loopId, comments }`
 
 ---
 
@@ -348,17 +341,11 @@ services/
 |---|---|---|
 | `getOnlineUsers` | `string[]` (user IDs) | User connects/disconnects |
 | `newMessage` | `Message` object | Message sent to receiver |
-| `newNotification` | `Notification` object | Notification Service publishes via Redis |
-| `likedPost` | `{ postId, likes }` | Content Service publishes via Redis |
-| `commentedPost` | `{ postId, comments }` | Content Service publishes via Redis |
-| `likedLoop` | `{ loopId, likes }` | Content Service publishes via Redis |
-| `commentedLoop` | `{ loopId, comments }` | Content Service publishes via Redis |
 
 **Database Access**: Reads/writes to `conversations` and `messages` collections.
 
 **Key Changes from Monolith**:
-- **Redis-backed presence**: The in-memory `userSocketMap` is replaced with Redis hashes (`online:users`). This allows presence state to be shared if multiple Messaging Service instances are running (Redis Adapter for Socket.io).
-- **Redis Pub/Sub subscriber**: The Messaging Service subscribes to Redis channels published by Content Service and Notification Service to relay real-time events to connected WebSocket clients.
+- **Redis-backed presence**: The in-memory `userSocketMap` is replaced with Redis hashes (`online:users`). This allows presence state to be shared if multiple Messaging Service instances are running.
 - **Kafka Events Produced**: `MESSAGE_SENT` (consumed by Notification Service to generate notifications if desired in the future).
 
 ---
@@ -392,7 +379,7 @@ This means the frontend code does **not** need to be updated for notification en
 | `LOOP_COMMENTED` | Create "commented on your loop" notification |
 | `USER_FOLLOWED` | Create "started following you" notification |
 
-**After creating a notification**: Publishes to Redis Pub/Sub channel `realtime:newNotification` with the populated notification object. The Messaging Service picks this up and emits `"newNotification"` to the target user's socket.
+**After creating a notification**: The notification is persisted in MongoDB and served to the client on the next fetch.
 
 ---
 
@@ -428,34 +415,7 @@ Content Service
                 ▼
         Notification Service (consumer)
                 │
-                ├── 3. Create Notification in MongoDB
-                │
-                └── 4. Publish to Redis Pub/Sub: realtime:newNotification
-                            │
-                            ▼
-                    Messaging Service (Redis subscriber)
-                            │
-                            └── 5. Emit "newNotification" to target socket
-```
-
-### 4.3. Real-Time Broadcast (Redis Pub/Sub → Socket.io)
-
-Used for broadcasting UI state updates to all connected clients:
-
-```
-Content Service publishes:
-    Redis channel: realtime:likedPost
-    Payload: { postId, likes }
-        │
-        ▼
-Messaging Service subscribes:
-    Receives message on realtime:likedPost
-        │
-        ▼
-    io.emit("likedPost", { postId, likes })
-        │
-        ▼
-    All connected frontend clients receive update
+                └── 3. Create Notification in MongoDB
 ```
 
 This replaces the monolith's `io.emit(...)` calls that were directly inside content controllers.
@@ -522,8 +482,6 @@ All services connect to the **same MongoDB instance** (same connection string, s
 - **Usage**:
   1. **Application caching**: User profiles, post feeds, loop feeds with TTLs
   2. **Online presence**: Replace in-memory `userSocketMap` with Redis hash
-  3. **Pub/Sub**: Cross-service real-time event relay (Content → Messaging, Notification → Messaging)
-  4. **Socket.io Adapter**: Enable Socket.io to work across multiple Messaging Service instances
 
 ### 7.3. Apache Kafka
 
@@ -571,8 +529,6 @@ services:
 | All posts feed | `cache:posts:all` | 2 minutes | On post create/delete |
 | All loops feed | `cache:loops:all` | 2 minutes | On loop create |
 | Online presence | `online:users` (Redis Hash) | Session-based | On connect/disconnect |
-| Pub/Sub: content events | `realtime:likedPost`, `realtime:commentedPost`, etc. | N/A (pub/sub) | N/A |
-| Pub/Sub: notifications | `realtime:newNotification` | N/A (pub/sub) | N/A |
 
 **Failure Handling**: If Redis is unavailable:
 - Cache misses fall through to MongoDB (no data loss)
@@ -621,7 +577,7 @@ All events use a consistent envelope:
 | Cookie-based auth | None | Gateway forwards cookies transparently |
 | Socket.io connection | Minimal | Gateway proxies WebSocket upgrades to Messaging Service |
 | Notification paths | None | Gateway routes legacy paths to Notification Service |
-| Real-time events (`likedPost`, etc.) | None | Messaging Service re-broadcasts via Redis Pub/Sub subscription |
+| Real-time events (`likedPost`, etc.) | None | Not currently implemented; users see updates on page reload |
 
 **The only potential frontend change**: If the Socket.io connection path needs a namespace or explicit path configuration due to the proxy layer. This will be verified during implementation and adjusted if needed.
 
@@ -638,10 +594,9 @@ Step 3:  User Service (depends on shared User model)
 Step 4:  Content Service (depends on User model for populates)
 Step 5:  API Gateway (routes to Auth, User, Content)
 Step 6:  Messaging Service (Socket.io hub, depends on Redis for presence)
-Step 7:  Notification Service (Kafka consumer, depends on Redis Pub/Sub)
+Step 7:  Notification Service (Kafka consumer)
 Step 8:  Kafka event wiring (Content/User → Kafka → Notification)
 Step 9:  Redis caching integration
-Step 10: Redis Pub/Sub real-time relay wiring
 Step 11: Failure handling and testing
 Step 12: Documentation finalization
 ```
@@ -658,7 +613,7 @@ Each step will be verified independently before proceeding.
 | **Shared MongoDB** | True DB-per-service would require complex sync/duplication for deeply interlinked User references; logical separation is sufficient for this project |
 | **Each service verifies JWT independently** | Eliminates single point of failure and inter-service auth call overhead |
 | **Kafka for business events only** | Not every HTTP call goes through Kafka — only meaningful events that trigger cross-service side effects |
-| **Redis Pub/Sub for real-time relay** | Replaces direct `io.emit()` calls from non-messaging services; lightweight and fits the existing broadcast pattern |
+| **Kafka for all cross-service events** | Guarantees delivery unlike fire-and-forget alternatives; handles notification generation and any future cross-service side effects |
 | **Redis for presence** | Replaces in-memory `userSocketMap`; enables horizontal scaling of Messaging Service |
 | **API Gateway does NOT verify auth** | Keep the gateway thin; auth verification stays in each service with the shared secret |
 | **Frontend unchanged** | Gateway preserves all URL paths, cookie handling, and WebSocket behavior |

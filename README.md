@@ -52,7 +52,7 @@ The platform is built on a **scalable microservices architecture**, utilizing an
 - **One-on-One Chat** - Private conversations with real-time delivery via Socket.io
 - **Message History** - View past conversations saved in MongoDB
 - **Media in Messages** - Send images along with messages
-- **Cross-Service Scaling** - WebSocket connections scaled using Redis Pub/Sub adapter
+- **Cross-Service Scaling** - WebSocket connections scaled across instances
 
 ![VIBE Messages](./docs/messages-screen.png)
 

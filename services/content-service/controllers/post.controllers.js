@@ -91,13 +91,11 @@ export const like = async (req, res) => {
                     postOwnerId: post.author,
                     userId: req.userId
                 });
-                // Note: Real-time notification emission will be restored via Redis Pub/Sub in later phase
             }
         }
 
         await post.save()
         await post.populate("author", "name userName profileImage")
-        // Note: Real-time broadcast 'likedPost' will be restored via Redis Pub/Sub in later phase
         
         // Cache Invalidation
         try {
@@ -133,12 +131,10 @@ export const comment = async (req, res) => {
                 userId: req.userId,
                 message
             });
-            // Note: Real-time notification emission will be restored via Redis Pub/Sub in later phase
         }
         await post.save()
         await post.populate("author", "name userName profileImage")
         await post.populate("comments.author")
-        // Note: Real-time broadcast 'commentedPost' will be restored via Redis Pub/Sub in later phase
         
         // Cache Invalidation
         try {

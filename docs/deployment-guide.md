@@ -120,18 +120,6 @@ Before starting, make sure you have:
 > [!NOTE]
 > Notice `rediss://` (with double 's') — this enables TLS. Upstash requires TLS connections. The `ioredis` library used in the project automatically handles `rediss://` URLs with TLS.
 
-### 2.3 Upstash Limitations to Be Aware Of
-
-- **Pub/Sub**: Upstash **does NOT support Redis Pub/Sub** in their serverless Redis offering. This impacts:
-  - Real-time broadcast events (likedPost, commentedPost, etc.) from Content Service → Messaging Service
-  - Notification push events from Notification Service → Messaging Service
-  
-> [!WARNING]
-> **Pub/Sub Workaround**: Since Upstash doesn't support Pub/Sub, you have two options:
-> 1. **Skip Pub/Sub for now** — Core functionality (posts, auth, messaging, notifications) works fine without it. Only real-time broadcast updates (like count changes) won't auto-refresh. Users see updates on page reload.
-> 2. **Use Upstash's `@upstash/redis` REST-based polling** or switch to a Pub/Sub alternative like **Ably** or **Pusher** for real-time events.
->
-> **Recommendation**: Start with option 1. The app is fully functional without Pub/Sub — it only affects the "live counter" UI updates.
 
 ---
 

@@ -168,7 +168,7 @@ npm run dev
 | Service | Internal Port | Exposed Port | Docker Service Name | Description |
 |---|---|---|---|---|
 | MongoDB | 27017 | — | `mongodb` | Primary database |
-| Redis | 6379 | — | `redis` | Cache & pub/sub |
+| Redis | 6379 | — | `redis` | Cache |
 | Kafka | 9092 | — | `kafka` | Async event bus |
 | API Gateway | 8000 | **8000** | `api-gateway` | Client entry point |
 | Auth Service | 3001 | — | `auth-service` | Authentication |

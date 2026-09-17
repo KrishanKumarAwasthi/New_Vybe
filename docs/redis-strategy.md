@@ -1,7 +1,7 @@
 # Redis Strategy (Phase 6)
 
 ## 1. Why Redis is Being Used
-Redis is used as a read-through cache to reduce the load on MongoDB for frequently accessed, read-heavy endpoints. It operates strictly as a caching layer and is not used for sessions, Pub/Sub, messaging, or persistent state.
+Redis is used as a read-through cache to reduce the load on MongoDB for frequently accessed, read-heavy endpoints. It operates strictly as a caching layer and is not used for sessions, messaging, or persistent state.
 
 ## 2. Cached Endpoints
 Only the following two read-heavy endpoints are cached:
@@ -46,4 +46,4 @@ The existing `GET /api/post/getAll` endpoint returns all posts globally (sorted 
 ## 9. Differentiation from Kafka
 In this architecture:
 - **Redis** is strictly for synchronous data caching to optimize read performance.
-- **Kafka** (implemented in Phase 5) is strictly for asynchronous event-driven business flows (e.g., generating notifications without blocking the HTTP response). Redis does NOT replace Kafka, nor does it handle background tasks or Pub/Sub messaging.
+- **Kafka** (implemented in Phase 5) is strictly for asynchronous event-driven business flows (e.g., generating notifications without blocking the HTTP response). Redis does NOT replace Kafka, nor does it handle background tasks or messaging.
