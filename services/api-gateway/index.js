@@ -50,6 +50,7 @@ app.use(cors({
 app.use(cookieParser())
 
 // ─── Health Check ────────────────────────────────────────
+app.get("/", (req, res) => res.status(200).send("API Gateway is running"));
 app.get("/health", (req, res) => {
     res.json({ service: "api-gateway", status: "healthy", timestamp: new Date().toISOString() })
 })
@@ -75,7 +76,8 @@ app.get("/health/all", async (req, res) => {
 
     for (const [name, url] of Object.entries(services)) {
         try {
-            await axios.get(`${url}/health`, { timeout: 3000 })
+            // Increased timeout for cold starts on Render free tier
+            await axios.get(`${url}/health`, { timeout: 10000 })
             results[name] = "up"
         } catch (error) {
             results[name] = "down"
@@ -174,7 +176,7 @@ app.use((req, res) => {
 })
 
 // ─── Start ──────────────────────────────────────────────
-const server = app.listen(port, () => {
+const server = app.listen(port, "0.0.0.0", () => {
     console.log(`[API Gateway] running on port ${port}`)
     console.log(`  → Auth Service:         ${AUTH_SERVICE_URL}`)
     console.log(`  → User Service:         ${USER_SERVICE_URL}`)
